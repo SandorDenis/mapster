@@ -24,7 +24,11 @@ public readonly ref struct MapFeatureData
     public GeometryType Type { get; init; }
     public ReadOnlySpan<char> Label { get; init; }
     public ReadOnlySpan<Coordinate> Coordinates { get; init; }
-    public Dictionary<string, string> Properties { get; init; }
+    public Dictionary<ValueEnum, string> Properties { get; init; }
+
+    public enum ValueEnum {
+        Name = 0, Natural = 1, Water = 2, Highway = 3, Railway = 4, Boundary = 5, LandType = 6, AdminLevel = 7, Place = 8, Building = 9, Others = 10, Amenity = 11
+    }
 }
 
 /// <summary>
@@ -142,6 +146,17 @@ public unsafe class DataFile : IDisposable
         GetString(stringsOffset, charsOffset, i + 1, out value);
     }
 
+    public static string FirstCharToUpper(string input) =>
+        input switch {
+            null => throw new ArgumentNullException(nameof(input)),
+            "" => throw new ArgumentException($"{nameof(input)} cannot be empty", nameof(input)),
+            _ => string.Concat(input[0].ToString().ToUpper(), input.AsSpan(1))
+        };
+
+    public string[] StringValueList = new[] {
+        "name", "natural", "water", "highway", "railway", "boundary", "landtype", "adminlevel", "place", "building", "others", "amenity"
+    };
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public void ForeachFeature(BoundingBox b, MapFeatureDelegate? action)
     {
@@ -181,11 +196,14 @@ public unsafe class DataFile : IDisposable
 
                 if (isFeatureInBBox)
                 {
-                    var properties = new Dictionary<string, string>(feature->PropertyCount);
+                    var properties = new Dictionary<MapFeatureData.ValueEnum, string>(feature->PropertyCount);
                     for (var p = 0; p < feature->PropertyCount; ++p)
                     {
                         GetProperty(header.Tile.Value.StringsOffsetInBytes, header.Tile.Value.CharactersOffsetInBytes, p * 2 + feature->PropertiesOffset, out var key, out var value);
-                        properties.Add(key.ToString(), value.ToString());
+                        if (StringValueList.Contains(key.ToString())) {
+                                MapFeatureData.ValueEnum keyEnum = (MapFeatureData.ValueEnum)Enum.Parse(typeof(MapFeatureData.ValueEnum), FirstCharToUpper(key.ToString()));
+                                properties.Add(keyEnum, value.ToString());
+                        }
                     }
 
                     if (!action(new MapFeatureData
